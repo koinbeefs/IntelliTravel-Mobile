@@ -3,7 +3,7 @@
   "appName": "IntelliTravel",
   "webDir": "dist",
   "server": {
-    "androidScheme": "https",
+    "url": "https://intelli-travel-mobile.vercel.app", 
     "cleartext": true 
   }
 }
