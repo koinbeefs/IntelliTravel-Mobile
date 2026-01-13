@@ -1,14 +1,17 @@
 import axios from 'axios';
 
+// 1. Point this explicitly to your Railway Backend
+const BASE_URL = 'https://intellitravel-production.up.railway.app/api';
+
 const api = axios.create({
-    baseURL: 'https://intellitravel-production.up.railway.app/api', // Laravel URL
+    baseURL: BASE_URL,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
+    withCredentials: true // IMPORTANT: This helps with Sanctum cookies if you use them
 });
 
-// Add token to requests if it exists
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {

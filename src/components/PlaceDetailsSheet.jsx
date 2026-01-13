@@ -6,8 +6,9 @@ export default function PlaceDetailsSheet({ place, onClose, onNavigate }) {
 
     const getImageUrl = (p) => {
         if (!p) return '';
+        const API_URL = 'https://intellitravel-production.up.railway.app/api'; 
         if (p.source === 'google' && p.photo_reference) {
-            return `http://localhost:8000/api/places/photo?ref=${p.photo_reference}`;
+           imageUrl = `${API_URL}/places/photo?ref=${place.photo_reference}`;
         }
         const cat = (p.category || '').toLowerCase();
         if (cat.includes('hotel')) return 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400';

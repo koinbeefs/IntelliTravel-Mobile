@@ -3,8 +3,10 @@ import { Star, MapPin } from 'lucide-react';
 export default function PlaceCard({ place, onClick }) {
     // Determine Image URL
     let imageUrl;
+    const API_URL = 'https://intellitravel-production.up.railway.app/api'; 
+
     if (place.source === 'google' && place.photo_reference) {
-        imageUrl = `http://localhost:8000/api/places/photo?ref=${place.photo_reference}`;
+        imageUrl = `${API_URL}/places/photo?ref=${place.photo_reference}`;
     } else {
         const category = (place.category || '').toLowerCase();
         if (category.includes('hotel')) imageUrl = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&q=80';
