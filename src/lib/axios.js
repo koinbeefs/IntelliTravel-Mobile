@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // 1. Point this explicitly to your Railway Backend
-const BASE_URL = 'https://intellitravel-production.up.railway.app/api';
+const BASE_URL = 'https://intellitravel.brgycare.com/api';
 
 const api = axios.create({
     baseURL: BASE_URL,

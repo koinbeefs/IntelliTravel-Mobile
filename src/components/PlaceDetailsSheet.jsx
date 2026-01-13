@@ -6,7 +6,7 @@ export default function PlaceDetailsSheet({ place, onClose, onNavigate }) {
 
     const getImageUrl = (p) => {
         if (!p) return '';
-        const API_URL = 'https://intellitravel-production.up.railway.app/api'; 
+        const API_URL = 'https://intellitravel.brgycare.com/api'; 
         if (p.source === 'google' && p.photo_reference) {
            imageUrl = `${API_URL}/places/photo?ref=${place.photo_reference}`;
         }

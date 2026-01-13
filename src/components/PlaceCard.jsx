@@ -3,7 +3,7 @@ import { Star, MapPin } from 'lucide-react';
 export default function PlaceCard({ place, onClick }) {
     // Determine Image URL
     let imageUrl;
-    const API_URL = 'https://intellitravel-production.up.railway.app/api'; 
+    const API_URL = 'https://intellitravel.brgycare.com/api'; 
 
     if (place.source === 'google' && place.photo_reference) {
         imageUrl = `${API_URL}/places/photo?ref=${place.photo_reference}`;
