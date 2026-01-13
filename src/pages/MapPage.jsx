@@ -278,7 +278,7 @@ export default function MapPage() {
                             <div className="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-gray-100 shadow-inner">
                                 <img 
                                     src={selectedPlace.source === 'google' && selectedPlace.photo_reference 
-                                        ? `http://localhost:8000/api/places/photo?ref=${selectedPlace.photo_reference}`
+                                        ? `http://https://intellitravel-production.up.railway.app/api/places/photo?ref=${selectedPlace.photo_reference}`
                                         : 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200'
                                     }
                                     className="w-full h-full object-cover"
