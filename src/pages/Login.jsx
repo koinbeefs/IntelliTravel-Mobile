@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
+import { Browser } from '@capacitor/browser';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -23,6 +24,14 @@ export default function Login() {
     const handleGuest = () => {
         loginAsGuest();
         navigate('/home');
+    };
+
+    const handleGoogleLogin = async () => {
+        // 1. Open the In-App Browser
+        await Browser.open({ 
+            url: 'https://intellitravel.brgycare.com/api/auth/google',
+            windowName: '_self' // Important for keeping it integrated
+        });
     };
 
     return (
@@ -66,13 +75,13 @@ export default function Login() {
                         <div className="flex-grow border-t border-gray-200"></div>
                     </div>
 
-                    <a 
-                        href="https://intellitravel.brgycare.com/api/auth/google"
+                    <button 
+                        onClick={handleGoogleLogin}
                         className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 py-4 rounded-xl font-semibold hover:bg-gray-50 transition"
                     >
                         <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
                         Google
-                    </a>
+                    </button>
                 </div>
 
                 {/* NEW: Guest Button */}

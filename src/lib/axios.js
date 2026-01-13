@@ -9,7 +9,7 @@ const api = axios.create({
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
-    withCredentials: true // IMPORTANT: This helps with Sanctum cookies if you use them
+    //withCredentials: true // IMPORTANT: This helps with Sanctum cookies if you use them
 });
 
 api.interceptors.request.use((config) => {
