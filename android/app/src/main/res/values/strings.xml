@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">IntelliTravel</string>
+    <string name="title_activity_main">IntelliTravel</string>
+    <string name="package_name">com.intellitravel.app</string>
+    <string name="custom_url_scheme">com.intellitravel.app</string>
+</resources>

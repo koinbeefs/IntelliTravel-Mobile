@@ -1,0 +1,9 @@
+{
+  "appId": "com.intellitravel.app",
+  "appName": "IntelliTravel",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true 
+  }
+}
