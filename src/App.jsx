@@ -1,5 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate} from 'react-router-dom';
+import { useEffect } from 'react'; // Import useEffect
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { App as CapacitorApp } from '@capacitor/app'; // Import Capacitor App
+import { Browser } from '@capacitor/browser'; // Import Capacitor Browser
 import Login from './pages/Login';
 import Register from './pages/Register';
 import GoogleCallback from './pages/GoogleCallback';
@@ -17,6 +20,41 @@ import LiveNavigationPage from './pages/LiveNavigationPage'; // <--- IMPORT THIS
 import ChatPage from './pages/ChatPage';
 import PrivacySecurityPage from './pages/PrivacySecurityPage';
 
+function AppUrlListener() {
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        CapacitorApp.addListener('appUrlOpen', async (data) => {
+            console.log('App opened with URL:', data.url);
+            
+            // data.url example: "intellitravel://auth/callback?token=xyz123"
+            try {
+                const url = new URL(data.url);
+                
+                // Check if this is our Google Auth Callback
+                if (url.host === 'auth' && url.pathname.includes('callback')) {
+                    const token = url.searchParams.get('token');
+                    if (token) {
+                        // Save token
+                        localStorage.setItem('token', token);
+                        
+                        // Close the In-App Browser (Chrome/Safari View)
+                        await Browser.close();
+                        
+                        // Navigate to Home
+                        // Force window reload to ensure AuthContext picks up the new token immediately
+                        window.location.href = '/home'; 
+                    }
+                }
+            } catch (e) {
+                console.error('Deep link error:', e);
+            }
+        });
+    }, [navigate]);
+
+    return null; // This component doesn't render anything visible
+}
+
 const ProtectedRoute = ({ children }) => {
     const { user, loading } = useAuth();
     if (loading) return (
@@ -31,6 +69,7 @@ const ProtectedRoute = ({ children }) => {
 export default function App() {
     return (
         <BrowserRouter>
+            <AppUrlListener />
             <AuthProvider>
                 <Routes>
                     {/* Public / Standalone Routes */}
