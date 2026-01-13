@@ -1,54 +1,55 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Mail, Settings, Shield, Bell, ChevronRight, Save, X, Camera, Map, Edit2, Calendar } from 'lucide-react';
+import api from '../lib/axios'; // Import API client
+import { 
+  LogOut, User, Mail, Settings, Shield, 
+  Bell, ChevronRight, Save, X, Camera, Map, Edit2
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import api from '../lib/axios';
 
 export default function ProfilePage() {
-    const { user, logout, loading: authLoading } = useAuth();
+    const { user, logout } = useAuth();
     const navigate = useNavigate();
-
+    
     // UI State
     const [activeTab, setActiveTab] = useState('overview');
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    
-    // Real Data State
-    const [tripCount, setTripCount] = useState(0);
-    const [memberSince, setMemberSince] = useState('');
 
-    // Form State
+    // Real Data State
+    const [stats, setStats] = useState({ tripCount: 0, recentTrips: [] });
+    
+    // Form State (Pre-filled with user data)
     const [formData, setFormData] = useState({
-        username: '',
-        email: '',
+        username: user?.username || '',
+        email: user?.email || '',
+        bio: 'Avid traveler & explorer.', // Note: Add 'bio' to your backend User model if you want this persistent
+        notifications: true
     });
 
-    // 1. Load User Data & Stats
+    // Reset form when user loads
     useEffect(() => {
         if (user) {
-            setFormData({
+            setFormData(prev => ({
+                ...prev,
                 username: user.username || '',
-                email: user.email || '',
-            });
-
-            // Format "Member Since"
-            if (user.created_at) {
-                const date = new Date(user.created_at);
-                setMemberSince(date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
-            }
-
-            // Fetch Real Trip Count
-            fetchTripStats();
+                email: user.email || ''
+            }));
+            fetchUserStats();
         }
     }, [user]);
 
-    const fetchTripStats = async () => {
+    // Fetch Real Trip Data
+    const fetchUserStats = async () => {
         try {
             const { data } = await api.get('/trips');
-            setTripCount(data.length);
+            setStats({
+                tripCount: data.length,
+                recentTrips: data.slice(0, 3) // Get top 3 most recent
+            });
         } catch (e) {
-            console.error("Failed to fetch trip stats", e);
+            console.error("Failed to fetch stats", e);
         }
     };
 
@@ -63,19 +64,14 @@ export default function ProfilePage() {
         e.preventDefault();
         setIsLoading(true);
         try {
-            // Call the actual update endpoint
-            // Note: You need to ensure your backend supports PUT /user or similar.
-            // For now, assuming standard Laravel AuthController "update" logic if implemented,
-            // otherwise this is a placeholder for where you add that backend logic.
-             await api.put('/user/profile', {
+            // Update User Profile
+            await api.put('/user/profile', {
                 username: formData.username,
                 email: formData.email
             });
-            
             alert("Profile updated successfully!");
             setIsEditing(false);
-            // Ideally reload user context here, e.g. window.location.reload() or a context method
-            window.location.reload(); 
+            window.location.reload(); // Reload to refresh global user context
         } catch (err) {
             alert(err.response?.data?.message || "Failed to update profile.");
         } finally {
@@ -83,172 +79,216 @@ export default function ProfilePage() {
         }
     };
 
-    // --- Sub-Components ---
-    const StatCard = ({ icon: Icon, label, value, color }) => (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
-                <Icon size={24} className="text-white" />
+    // Helper: Time Ago formatted
+    const timeAgo = (dateString) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffInDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        if (diffInDays === 0) return 'Today';
+        if (diffInDays === 1) return 'Yesterday';
+        return `${diffInDays}d ago`;
+    };
+
+    // --- Sub-Components for Tabs ---
+
+    const OverviewTab = () => (
+        <div className="space-y-4">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2 text-blue-600">
+                        <Map size={20} />
+                        <span className="font-bold text-sm">Trips Planned</span>
+                    </div>
+                    {/* Real Data: Trip Count */}
+                    <p className="text-2xl font-bold text-gray-900">{stats.tripCount}</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                    <div className="flex items-center gap-2 mb-2 text-purple-600">
+                        <Shield size={20} />
+                        <span className="font-bold text-sm">Account Status</span>
+                    </div>
+                    {/* Real Data: Check verification */}
+                    <p className="text-sm font-bold text-gray-900 mt-2 bg-white inline-block px-2 py-1 rounded shadow-sm">
+                        {(user?.email_verified_at || user?.google_id) ? 'Verified Member' : 'Member'}
+                    </p>
+                </div>
             </div>
-            <div>
-                <div className="text-2xl font-bold text-gray-800">{value}</div>
-                <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</div>
+
+            {/* Recent Activity (Real Data) */}
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+                <h3 className="font-bold text-gray-800 mb-3">Recent Activity</h3>
+                <div className="space-y-3">
+                    {stats.recentTrips.length > 0 ? (
+                        stats.recentTrips.map(trip => (
+                            <div key={trip.id} onClick={() => navigate(`/trips/${trip.id}`)} className="flex items-center gap-3 text-sm p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition">
+                                <div className="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
+                                <p className="text-gray-600 truncate">
+                                    Created trip to <span className="font-bold text-gray-800">{trip.destination}</span>
+                                </p>
+                                <span className="ml-auto text-xs text-gray-400 shrink-0">{timeAgo(trip.created_at)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-sm text-gray-400 italic p-2">No recent activity.</p>
+                    )}
+                </div>
             </div>
         </div>
     );
 
-    if (authLoading) return <div className="p-8 text-center">Loading profile...</div>;
+    const SettingsTab = () => (
+        <div className="space-y-4">
+            <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Bell className="text-gray-500" size={20} />
+                        <div>
+                            <p className="font-medium text-gray-900">Push Notifications</p>
+                            <p className="text-xs text-gray-500">Receive alerts about your trips</p>
+                        </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            className="sr-only peer"
+                            checked={formData.notifications}
+                            onChange={(e) => setFormData({...formData, notifications: e.target.checked})}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+                
+                <button onClick={() => navigate('/profile/security')} className="w-full p-4 flex items-center justify-between hover:bg-gray-50 text-left">
+                    <div className="flex items-center gap-3">
+                        <Shield className="text-gray-500" size={20} />
+                        <div>
+                            <p className="font-medium text-gray-900">Privacy & Security</p>
+                            <p className="text-xs text-gray-500">Change password and visibility</p>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="text-gray-400" />
+                </button>
+            </div>
+
+            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                <h3 className="font-bold text-red-700 text-sm mb-1">Danger Zone</h3>
+                <p className="text-xs text-red-600 mb-3">Deleting your account is permanent.</p>
+                <button className="px-4 py-2 bg-white border border-red-200 text-red-600 text-sm font-bold rounded-lg hover:bg-red-50">
+                    Delete Account
+                </button>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-24">
-            {/* Header / Cover */}
-            <div className="bg-blue-600 h-48 relative rounded-b-[2.5rem] shadow-lg overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20" />
-                
-                {/* Top Bar */}
-                <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-center text-white z-10">
-                    <h1 className="text-xl font-bold">My Profile</h1>
-                    <button onClick={() => navigate('/home')} className="p-2 bg-white/20 backdrop-blur-md rounded-full hover:bg-white/30 transition">
-                        <X size={20} />
+        <div className="min-h-screen bg-gray-50 pb-20"> {/* pb-20 for BottomNav space */}
+            {/* Header / Banner */}
+            <div className="bg-white pb-6 shadow-sm border-b border-gray-100">
+                <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative">
+                    {/* Logout Button Absolute Top Right */}
+                    <button 
+                        onClick={handleLogout}
+                        className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm p-2 rounded-full text-white hover:bg-white/30 transition"
+                    >
+                        <LogOut size={20} />
                     </button>
                 </div>
-            </div>
-
-            {/* Profile Info Card */}
-            <div className="px-6 -mt-20 relative z-10">
-                <div className="bg-white rounded-3xl shadow-xl p-6 flex flex-col items-center text-center">
-                    <div className="relative mb-4">
-                        <div className="w-24 h-24 rounded-full p-1 bg-white shadow-md">
-                            <img 
-                                src={user?.profile_pic || `https://ui-avatars.com/api/?name=${user?.username}&background=38a1db&color=fff`} 
-                                alt="Profile" 
-                                className="w-full h-full rounded-full object-cover bg-gray-200"
-                            />
-                        </div>
-                        {isEditing && (
-                            <button className="absolute bottom-0 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg border-2 border-white">
-                                <Camera size={14} />
-                            </button>
-                        )}
+                
+                <div className="px-6 -mt-12 flex justify-between items-end">
+                    <div className="relative">
+                        <img 
+                            src={user?.profile_pic || `https://ui-avatars.com/api/?name=${user?.username || 'User'}&background=random`} 
+                            alt="Profile"
+                            className="w-24 h-24 rounded-2xl border-4 border-white shadow-md bg-white object-cover"
+                        />
+                        <button className="absolute bottom-0 right-0 bg-gray-900 text-white p-1.5 rounded-full border-2 border-white shadow-sm">
+                            <Camera size={14} />
+                        </button>
                     </div>
-
-                    <h2 className="text-2xl font-bold text-gray-800">{user?.username}</h2>
-                    <p className="text-gray-500 text-sm mb-4">{user?.email}</p>
-                    
-                    <div className="flex items-center gap-2 text-xs font-medium bg-blue-50 text-blue-600 px-3 py-1 rounded-full">
-                        <Shield size={12} />
-                        <span>Verified Member</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="px-6 mt-6 grid grid-cols-2 gap-4">
-                <StatCard 
-                    icon={Map} 
-                    label="Trips Planned" 
-                    value={tripCount} 
-                    color="bg-purple-500" 
-                />
-                 <StatCard 
-                    icon={Calendar} 
-                    label="Joined" 
-                    value={memberSince || "Recently"} 
-                    color="bg-orange-500" 
-                />
-            </div>
-
-            {/* Tabs / Actions */}
-            <div className="px-6 mt-8 space-y-4">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Account Settings</h3>
-
-                {/* Edit Profile Toggle */}
-                <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-                    <div 
+                    <button 
                         onClick={() => setIsEditing(!isEditing)}
-                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition"
+                        className={`px-4 py-2 rounded-lg font-bold text-sm border shadow-sm transition-colors flex items-center gap-2
+                        ${isEditing 
+                            ? 'bg-gray-100 text-gray-700 border-gray-200' 
+                            : 'bg-blue-600 text-white border-transparent hover:bg-blue-700'}`}
                     >
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                                <User size={20} />
-                            </div>
-                            <span className="font-medium text-gray-700">Edit Personal Details</span>
-                        </div>
-                        <ChevronRight size={18} className={`text-gray-400 transition-transform ${isEditing ? 'rotate-90' : ''}`} />
-                    </div>
-
-                    {/* Edit Form */}
-                    <AnimatePresence>
-                        {isEditing && (
-                            <motion.form 
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                onSubmit={handleSaveProfile}
-                                className="px-4 pb-4 border-t border-gray-100 bg-gray-50/50"
-                            >
-                                <div className="space-y-3 pt-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 ml-1">Username</label>
-                                        <input 
-                                            type="text" 
-                                            value={formData.username}
-                                            onChange={(e) => setFormData({...formData, username: e.target.value})}
-                                            className="w-full mt-1 p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 bg-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 ml-1">Email Address</label>
-                                        <input 
-                                            type="email" 
-                                            value={formData.email}
-                                            onChange={(e) => setFormData({...formData, email: e.target.value})}
-                                            className="w-full mt-1 p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 bg-white"
-                                        />
-                                    </div>
-                                    <button 
-                                        type="submit" 
-                                        disabled={isLoading}
-                                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-200 active:scale-95 transition mt-2 flex justify-center items-center gap-2"
-                                    >
-                                        {isLoading ? "Saving..." : <><Save size={18} /> Save Changes</>}
-                                    </button>
-                                </div>
-                            </motion.form>
-                        )}
-                    </AnimatePresence>
+                        {isEditing ? <><X size={16}/> Cancel</> : <><Edit2 size={16}/> Edit Profile</>}
+                    </button>
                 </div>
 
-                {/* Security Link */}
-                <button 
-                    onClick={() => navigate('/profile/security')}
-                    className="w-full bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between hover:bg-gray-50 transition"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                            <Shield size={20} />
-                        </div>
-                        <span className="font-medium text-gray-700">Security & Privacy</span>
-                    </div>
-                    <ChevronRight size={18} className="text-gray-400" />
-                </button>
+                <div className="px-6 mt-4">
+                    {isEditing ? (
+                        <form onSubmit={handleSaveProfile} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
+                                <input 
+                                    className="w-full border p-2 rounded-lg bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100"
+                                    value={formData.username}
+                                    onChange={e => setFormData({...formData, username: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                                <input 
+                                    className="w-full border p-2 rounded-lg bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100"
+                                    value={formData.email}
+                                    onChange={e => setFormData({...formData, email: e.target.value})}
+                                />
+                            </div>
+                            <button 
+                                disabled={isLoading}
+                                className="w-full bg-green-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"
+                            >
+                                {isLoading ? "Saving..." : <><Save size={18} /> Save Changes</>}
+                            </button>
+                        </form>
+                    ) : (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                            <h1 className="text-2xl font-bold text-gray-900">{user?.username || 'Guest User'}</h1>
+                            <p className="text-gray-500 flex items-center gap-1.5 text-sm mt-1">
+                                <Mail size={14} /> {user?.email}
+                            </p>
+                            <p className="text-gray-600 mt-3 text-sm leading-relaxed max-w-sm">
+                                {formData.bio}
+                            </p>
+                        </motion.div>
+                    )}
+                </div>
 
-                 {/* Logout Button */}
-                 <button 
-                    onClick={handleLogout}
-                    className="w-full bg-white p-4 rounded-2xl border border-red-100 shadow-sm flex items-center justify-between hover:bg-red-50 transition group"
+                {/* Tab Switcher */}
+                <div className="flex gap-6 px-6 mt-6 border-b border-gray-100">
+                    {['overview', 'settings'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`pb-3 text-sm font-bold capitalize transition-colors relative
+                                ${activeTab === tab ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            {tab}
+                            {activeTab === tab && (
+                                <motion.div 
+                                    layoutId="activeTab"
+                                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full"
+                                />
+                            )}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="p-6">
+                <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 group-hover:bg-red-200 transition">
-                            <LogOut size={20} />
-                        </div>
-                        <span className="font-medium text-red-600">Log Out</span>
-                    </div>
-                </button>
+                    {activeTab === 'overview' ? <OverviewTab /> : <SettingsTab />}
+                </motion.div>
             </div>
             
-            <div className="mt-8 text-center">
-                <p className="text-xs text-gray-400">IntelliTravel v1.0.2</p>
-            </div>
         </div>
     );
 }
