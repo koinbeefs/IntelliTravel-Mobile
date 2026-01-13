@@ -116,7 +116,7 @@ export default function TripsListPage() {
                         <h3 className="font-bold text-gray-700 mb-1">No trips yet</h3>
                         <p className="text-sm text-gray-500 mb-4">Start planning your first adventure!</p>
                         <button 
-                            onClick={() => navigate('/home')}
+                            onClick={() => navigate('/trip-create')}
                             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition"
                         >
                             Plan a Trip
