@@ -67,7 +67,7 @@ export default function Login() {
                     </div>
 
                     <a 
-                        href="https://intellitravel-production.up.railway.app/api/auth/google"
+                        href="https://intellitravel.brgycare.com/api/auth/google"
                         className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 py-4 rounded-xl font-semibold hover:bg-gray-50 transition"
                     >
                         <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
