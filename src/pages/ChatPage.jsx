@@ -111,11 +111,13 @@ export default function ChatPage() {
         if (!input.trim() && !selectedImage) return;
 
         const formData = new FormData();
-        // Append content only if it exists
+        
+        // Append text if present
         if (input && input.trim().length > 0) {
             formData.append('content', input.trim());
         }
-        // Append image only if it exists
+        
+        // Append file if present
         if (selectedImage) {
             formData.append('image', selectedImage);
         }
@@ -126,20 +128,18 @@ export default function ChatPage() {
         setPreviewUrl(null);
 
         try {
-            // FIX: Explicitly set Content-Type to undefined to force browser to generate boundary
-            await api.post(`/trips/${tripId}/messages`, formData, {
-                headers: {
-                    'Content-Type': undefined 
-                }
-            });
+            // FIX: Just pass formData. Axios will now detect it and 
+            // set 'Content-Type: multipart/form-data; boundary=...' automatically.
+            await api.post(`/trips/${tripId}/messages`, formData);
             
+            // Refresh messages
             const { data } = await api.get(`/trips/${tripId}/messages`);
             setMessages(data);
         } catch (e) { 
-            console.error("Send Error:", e.response?.data || e.message);
-            // Show the actual error message from Laravel
-            const serverError = e.response?.data?.errors?.image?.[0] || e.response?.data?.message;
-            alert(`Failed to send: ${serverError || 'Unknown error'}`);
+            console.error("Send Error:", e);
+            const msg = e.response?.data?.message || 'Unknown error';
+            const errors = e.response?.data?.errors?.image?.[0];
+            alert(`Failed to send: ${errors || msg}`);
         }
     };
 

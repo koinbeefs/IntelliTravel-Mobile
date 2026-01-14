@@ -6,7 +6,7 @@ const BASE_URL = 'https://intellitravel.brgycare.com/api';
 const api = axios.create({
     baseURL: BASE_URL,
     headers: {
-        'Content-Type': 'application/json',
+        //'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
     //withCredentials: true // IMPORTANT: This helps with Sanctum cookies if you use them
