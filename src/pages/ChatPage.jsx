@@ -116,6 +116,7 @@ export default function ChatPage() {
         }
         if (selectedImage) {
             formData.append('image', selectedImage);
+            console.log("File type:", selectedImage.type);
         }
 
         setInput('');
