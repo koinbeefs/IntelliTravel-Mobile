@@ -111,25 +111,35 @@ export default function ChatPage() {
         if (!input.trim() && !selectedImage) return;
 
         const formData = new FormData();
+        // Append content only if it exists
         if (input && input.trim().length > 0) {
             formData.append('content', input.trim());
         }
+        // Append image only if it exists
         if (selectedImage) {
             formData.append('image', selectedImage);
-            console.log("File type:", selectedImage.type);
         }
 
+        // Clear UI immediately
         setInput('');
         setSelectedImage(null);
         setPreviewUrl(null);
 
         try {
-            await api.post(`/trips/${tripId}/messages`, formData);
+            // FIX: Explicitly set Content-Type to undefined to force browser to generate boundary
+            await api.post(`/trips/${tripId}/messages`, formData, {
+                headers: {
+                    'Content-Type': undefined 
+                }
+            });
+            
             const { data } = await api.get(`/trips/${tripId}/messages`);
             setMessages(data);
         } catch (e) { 
             console.error("Send Error:", e.response?.data || e.message);
-            alert(`Failed to send: ${e.response?.data?.message || 'Unknown error'}`);
+            // Show the actual error message from Laravel
+            const serverError = e.response?.data?.errors?.image?.[0] || e.response?.data?.message;
+            alert(`Failed to send: ${serverError || 'Unknown error'}`);
         }
     };
 
