@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Check, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
@@ -45,6 +45,10 @@ export default function ChatPage() {
     const fileInputRef = useRef();
     const messagesEndRef = useRef();
     const scrollRef = useRef();
+
+    // Delete Modal State
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [messageToDelete, setMessageToDelete] = useState(null);
 
     // 1. Fetch Init
     useEffect(() => {
@@ -111,28 +115,18 @@ export default function ChatPage() {
         if (!input.trim() && !selectedImage) return;
 
         const formData = new FormData();
-        
-        // Append text if present
-        if (input && input.trim().length > 0) {
-            formData.append('content', input.trim());
-        }
-        
-        // Append file if present
-        if (selectedImage) {
-            formData.append('image', selectedImage);
-        }
+        if (input && input.trim().length > 0) formData.append('content', input.trim());
+        if (selectedImage) formData.append('image', selectedImage);
 
-        // Clear UI immediately
         setInput('');
         setSelectedImage(null);
         setPreviewUrl(null);
 
         try {
-            // FIX: Just pass formData. Axios will now detect it and 
-            // set 'Content-Type: multipart/form-data; boundary=...' automatically.
-            await api.post(`/trips/${tripId}/messages`, formData);
-            
-            // Refresh messages
+            // Explicitly undefined Content-Type to let browser set boundary
+            await api.post(`/trips/${tripId}/messages`, formData, {
+                headers: { 'Content-Type': undefined }
+            });
             const { data } = await api.get(`/trips/${tripId}/messages`);
             setMessages(data);
         } catch (e) { 
@@ -142,20 +136,39 @@ export default function ChatPage() {
             alert(`Failed to send: ${errors || msg}`);
         }
     };
+
     const getImageUrl = (path) => {
         if (!path) return null;
-        if (path.startsWith('http')) return path; // Already full URL
-        // Prepend your actual backend URL
+        if (path.startsWith('http')) return path;
         return `https://intellitravel.brgycare.com${path}`; 
     };
 
-    const handleDeleteMessage = async (msgId) => {
-        if(!confirm('Delete this message for everyone?')) return;
+    // Open Delete Modal
+    const confirmDelete = (msg) => {
+        setMessageToDelete(msg);
+        setShowDeleteModal(true);
+    };
+
+    // Execute Delete
+    const handleDeleteAction = async (action) => {
+        if (!messageToDelete) return;
+
         try {
-            await api.delete(`/trips/${tripId}/messages/${msgId}`);
-            setMessages(messages.filter(m => m.id !== msgId));
+            if (action === 'everyone') {
+                // Delete from server (Unsend)
+                await api.delete(`/trips/${tripId}/messages/${messageToDelete.id}`);
+                setMessages(messages.filter(m => m.id !== messageToDelete.id));
+            } else {
+                // Delete for me (Local hide only)
+                // Note: For true "Delete for me", backend needs a 'hidden_for_users' table.
+                // Currently just hiding from UI until refresh.
+                setMessages(messages.filter(m => m.id !== messageToDelete.id));
+            }
         } catch (e) {
-            alert('Failed to delete');
+            alert('Failed to delete message');
+        } finally {
+            setShowDeleteModal(false);
+            setMessageToDelete(null);
         }
     };
 
@@ -186,12 +199,10 @@ export default function ChatPage() {
     };
 
     return (
-        // KEY CHANGE: Fixed container with flex column layout
-        // 'h-[100dvh]' handles dynamic viewport height on mobile
         <div className="fixed inset-0 z-[100] bg-gray-50 flex flex-col h-[100dvh] w-full">
             
-            {/* --- HEADER (Flex Item: Shrinks/Grows based on content, but usually fixed height) --- */}
-            <div className={`shrink-0 bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg`}>
+            {/* --- HEADER --- */}
+            <div className={`shrink-0 bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg z-10`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/20 rounded-full">
@@ -224,7 +235,7 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {/* --- MESSAGES AREA (Flex Item: Grows to fill available space) --- */}
+            {/* --- MESSAGES AREA --- */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 w-full" ref={scrollRef}>
                 {messages.map((msg) => {
                     const isMe = msg.user.id === user.id;
@@ -269,7 +280,7 @@ export default function ChatPage() {
 
                                     {isMe && (
                                         <button 
-                                            onClick={() => handleDeleteMessage(msg.id)}
+                                            onClick={() => confirmDelete(msg)}
                                             className="absolute -left-8 top-1/2 -translate-y-1/2 p-1.5 bg-gray-200 rounded-full text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-500"
                                         >
                                             <Trash2 size={14} />
@@ -286,7 +297,7 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* --- INPUT BAR (Flex Item: Shrink-0 stays at bottom) --- */}
+            {/* --- INPUT BAR --- */}
             <div className="shrink-0 bg-white border-t p-3 w-full safe-area-bottom">
                 {previewUrl && (
                     <div className="flex items-center gap-2 mb-2 p-2 bg-gray-100 rounded-lg w-fit animate-in fade-in slide-in-from-bottom-2">
@@ -332,7 +343,58 @@ export default function ChatPage() {
                 </form>
             </div>
 
-            {/* --- MODALS --- */}
+            {/* --- DELETE CONFIRMATION MODAL --- */}
+            <AnimatePresence>
+                {showDeleteModal && (
+                    <motion.div 
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm"
+                        onClick={() => setShowDeleteModal(false)}
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white w-full max-w-sm rounded-2xl shadow-xl p-6"
+                        >
+                            <div className="flex items-center gap-3 mb-4 text-red-600">
+                                <div className="p-3 bg-red-100 rounded-full">
+                                    <AlertTriangle size={24} />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">Delete Message?</h3>
+                            </div>
+                            
+                            <p className="text-gray-600 mb-6 text-sm">
+                                You can delete this message just for yourself, or unsend it for everyone in the chat.
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button 
+                                    onClick={() => handleDeleteAction('everyone')}
+                                    className="w-full py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 transition flex items-center justify-center gap-2"
+                                >
+                                    <Trash2 size={18} /> Unsend for Everyone
+                                </button>
+                                
+                                <button 
+                                    onClick={() => handleDeleteAction('me')}
+                                    className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition"
+                                >
+                                    Delete for Me
+                                </button>
+
+                                <button 
+                                    onClick={() => setShowDeleteModal(false)}
+                                    className="w-full py-2 text-gray-500 font-medium hover:text-gray-700 mt-2"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* --- IMAGE MODAL --- */}
             <AnimatePresence>
                 {expandedImage && (
                     <motion.div 
@@ -353,6 +415,7 @@ export default function ChatPage() {
                 )}
             </AnimatePresence>
 
+            {/* --- SETTINGS MODAL --- */}
             <AnimatePresence>
                 {showSettings && (
                     <motion.div 
@@ -367,6 +430,7 @@ export default function ChatPage() {
                         >
                             <h2 className="text-xl font-bold mb-6">Chat Settings</h2>
                             
+                            {/* Group Photo Section */}
                             <div className="mb-8 text-center">
                                 <div className="w-24 h-24 mx-auto rounded-full bg-gray-100 mb-3 relative overflow-hidden group">
                                     <img 
@@ -385,6 +449,7 @@ export default function ChatPage() {
                                 />
                             </div>
 
+                            {/* Theme Section */}
                             <div className="mb-8">
                                 <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Theme Color</h3>
                                 <div className="flex gap-3 flex-wrap">
@@ -400,7 +465,8 @@ export default function ChatPage() {
                                 </div>
                             </div>
 
-                            <div className="mb-8">
+                            {/* Location Section */}
+                             <div className="mb-8">
                                 <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Location</h3>
                                 <div className="bg-blue-50 p-4 rounded-xl flex items-center justify-between">
                                     <div className="flex items-center gap-3">
