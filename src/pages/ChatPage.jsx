@@ -44,6 +44,7 @@ export default function ChatPage() {
     const [expandedImage, setExpandedImage] = useState(null); 
     const fileInputRef = useRef();
     const messagesEndRef = useRef();
+    const scrollRef = useRef();
 
     // 1. Fetch Init
     useEffect(() => {
