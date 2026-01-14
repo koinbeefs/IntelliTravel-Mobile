@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Settings, Check, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 
-// ... (Keep THEMES and BUBBLE_THEMES constants same as before) ...
 const THEMES = {
     blue: 'from-blue-600 to-indigo-600',
     purple: 'from-purple-600 to-pink-600',
@@ -38,17 +37,17 @@ export default function ChatPage() {
     const [activeTheme, setActiveTheme] = useState('blue');
     const [isSharingLocation, setIsSharingLocation] = useState(false);
     const [activeSharers, setActiveSharers] = useState([]);
-    const [selectedMessageId, setSelectedMessageId] = useState(null); // For delete menu
     
-    // File Upload State
+    // Image State
     const [selectedImage, setSelectedImage] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
+    const [expandedImage, setExpandedImage] = useState(null); // For modal
     const fileInputRef = useRef();
 
+    const scrollRef = useRef();
     const messagesEndRef = useRef();
 
-    // ... (Keep useEffects 1, 2, 3 for fetching data and polling exactly the same) ...
-    // 1. Fetch Trip Data & Settings
+    // 1. Fetch Init
     useEffect(() => {
         const fetchInit = async () => {
             try {
@@ -64,7 +63,7 @@ export default function ChatPage() {
         fetchInit();
     }, [tripId]);
 
-    // 2. Poll Messages & Locations
+    // 2. Poll
     useEffect(() => {
         const poll = async () => {
             try {
@@ -81,7 +80,7 @@ export default function ChatPage() {
         return () => clearInterval(timer);
     }, [tripId]);
 
-    // 3. Location Tracking Logic
+    // 3. Location
     useEffect(() => {
         let watcher;
         if (isSharingLocation) {
@@ -102,8 +101,7 @@ export default function ChatPage() {
         return () => watcher && navigator.geolocation.clearWatch(watcher);
     }, [isSharingLocation, tripId]);
 
-
-    // Auto-scroll
+    // Scroll
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -117,45 +115,30 @@ export default function ChatPage() {
         if (input) formData.append('content', input);
         if (selectedImage) formData.append('image', selectedImage);
 
-        // Optimistic UI Update
-        const tempId = Date.now();
-        const tempMsg = {
-            id: tempId,
-            content: input,
-            type: selectedImage ? 'image' : 'text',
-            attachment_url: selectedImage ? URL.createObjectURL(selectedImage) : null, // Show local preview
-            user: { id: user.id, username: user.username, profile_pic: user.profile_pic },
-            created_at: new Date().toISOString()
-        };
-        
-        setMessages([...messages, tempMsg]);
+        // Clear UI immediately
         setInput('');
         setSelectedImage(null);
         setPreviewUrl(null);
 
         try {
-            await api.post(`/trips/${tripId}/messages`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-        } catch (e) {
-            console.error('Failed to send', e);
-            // Optionally remove the temp message on failure
+            // FIX: Do NOT set Content-Type manually for FormData with axios
+            await api.post(`/trips/${tripId}/messages`, formData);
+            // Fetch immediately to show the real message (with image URL)
+            const { data } = await api.get(`/trips/${tripId}/messages`);
+            setMessages(data);
+        } catch (e) { 
+            alert('Failed to send'); 
+            console.error(e);
         }
     };
 
-    const handleDeleteMessage = async (msgId, mode) => {
-        // mode = 'everyone' or 'me'
-        if(!confirm(`Delete for ${mode}?`)) return;
-        
+    const handleDeleteMessage = async (msgId) => {
+        if(!confirm('Delete this message for everyone?')) return;
         try {
-            // Need to add DELETE route in backend: Route::delete('/messages/{id}', ...)
-            await api.delete(`/messages/${msgId}`, { params: { mode } });
-            
-            // Remove from local state immediately
+            await api.delete(`/trips/${tripId}/messages/${msgId}`);
             setMessages(messages.filter(m => m.id !== msgId));
-            setSelectedMessageId(null);
         } catch (e) {
-            alert('Failed to delete message');
+            alert('Failed to delete');
         }
     };
 
@@ -166,8 +149,7 @@ export default function ChatPage() {
             setPreviewUrl(URL.createObjectURL(file));
         }
     };
-    
-    // ... (keep updateTripSettings same as before) ...
+
     const updateTripSettings = async (updates) => {
         try {
             const formData = new FormData();
@@ -175,21 +157,18 @@ export default function ChatPage() {
             if (updates.chat_theme_color) formData.append('chat_theme_color', updates.chat_theme_color);
             if (updates.group_photo) formData.append('group_photo', updates.group_photo);
 
-            const { data } = await api.post(`/trips/${tripId}/settings`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            const { data } = await api.post(`/trips/${tripId}/settings`, formData);
             setTripData(data);
             if (updates.chat_theme_color) setActiveTheme(updates.chat_theme_color);
             alert('Settings updated!');
         } catch (e) { alert('Failed to update'); }
     };
 
-
     return (
-        <div className="h-screen bg-gray-50 flex flex-col relative overflow-hidden">
+        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden relative">
             
-            {/* --- FIXED HEADER (z-index 40) --- */}
-            <div className={`fixed top-0 left-0 w-full z-40 bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg transition-colors duration-500`}>
+            {/* --- HEADER --- */}
+            <div className={`bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg sticky top-0 z-30`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/20 rounded-full">
@@ -198,19 +177,18 @@ export default function ChatPage() {
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden border-2 border-white/50">
                                 <img 
-                                    src={tripData?.group_photo || tripData?.user?.profile_pic || `https://ui-avatars.com/api/?name=${tripData?.title || 'T'}&background=random`} 
-                                    alt="Group"
+                                    src={tripData?.group_photo || tripData?.user?.profile_pic || `https://ui-avatars.com/api/?name=${tripData?.title}`} 
                                     className="w-full h-full object-cover"
                                 />
                             </div>
                             <div>
-                                <h1 className="font-bold text-lg leading-tight line-clamp-1">{tripData?.title || 'Trip Chat'}</h1>
+                                <h1 className="font-bold text-lg leading-tight">{tripData?.title || 'Trip Chat'}</h1>
                                 <p className="text-xs text-white/80 flex items-center gap-1">
-                                    <Users size={12} /> {collaborators.length}
+                                    <Users size={12} /> {collaborators.length} members
                                     {activeSharers.length > 0 && (
                                         <span className="flex items-center gap-1 ml-2 bg-green-500/20 px-1.5 py-0.5 rounded-full">
                                             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/> 
-                                            {activeSharers.length} Live
+                                            {activeSharers.length} sharing location
                                         </span>
                                     )}
                                 </p>
@@ -223,8 +201,8 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {/* --- SCROLLABLE MESSAGES (Padding top & bottom to clear fixed bars) --- */}
-            <div className="flex-1 overflow-y-auto pt-20 pb-24 px-4 space-y-4" onClick={() => setSelectedMessageId(null)}>
+            {/* --- MESSAGES AREA --- */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" ref={scrollRef}>
                 {messages.map((msg) => {
                     const isMe = msg.user.id === user.id;
                     return (
@@ -232,47 +210,55 @@ export default function ChatPage() {
                             key={msg.id}
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className={`flex gap-2 ${isMe ? 'justify-end' : 'justify-start'} relative group`}
+                            className={`flex gap-2 ${isMe ? 'justify-end' : 'justify-start'} group`}
                         >
-                             {/* DELETE MENU (Show on click) */}
-                             {selectedMessageId === msg.id && isMe && (
-                                <div className="absolute top-0 right-0 -mt-8 bg-white shadow-lg rounded-lg flex items-center p-1 z-10 text-xs">
-                                    <button onClick={() => handleDeleteMessage(msg.id, 'me')} className="px-2 py-1 hover:bg-gray-100 text-gray-700">Delete for me</button>
-                                    <div className="w-px h-3 bg-gray-300 mx-1"></div>
-                                    <button onClick={() => handleDeleteMessage(msg.id, 'everyone')} className="px-2 py-1 hover:bg-red-50 text-red-600">Everyone</button>
-                                </div>
+                            {/* Avatar for others */}
+                            {!isMe && (
+                                <img src={msg.user.profile_pic || `https://ui-avatars.com/api/?name=${msg.user.username}`} 
+                                     className="w-8 h-8 rounded-full self-end mb-1 border shadow-sm" />
                             )}
-
-                            {!isMe && <img src={msg.user.profile_pic} className="w-8 h-8 rounded-full self-end mb-1" />}
                             
-                            <div 
-                                className={`max-w-[70%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                                onClick={(e) => { e.stopPropagation(); if(isMe) setSelectedMessageId(msg.id); }}
-                            >
+                            <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[75%]`}>
                                 {!isMe && <span className="text-[10px] text-gray-500 ml-2 mb-1">{msg.user.username}</span>}
+                                
+                                <div className="relative">
+                                    {/* PHOTO MESSAGE */}
+                                    {msg.type === 'image' && msg.attachment_url ? (
+                                        <div className={`p-1 rounded-2xl ${isMe ? BUBBLE_THEMES[activeTheme] : 'bg-white border'}`}>
+                                            <img 
+                                                src={msg.attachment_url} 
+                                                className="rounded-xl w-60 h-60 object-cover cursor-pointer hover:opacity-95 transition-opacity bg-gray-100"
+                                                onClick={() => setExpandedImage(msg.attachment_url)}
+                                            />
+                                            {/* Show content caption if exists */}
+                                            {msg.content && msg.content !== 'Sent a photo' && (
+                                                <p className={`text-sm px-2 py-1 ${isMe ? 'text-white' : 'text-gray-800'}`}>
+                                                    {msg.content}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        /* TEXT MESSAGE */
+                                        <div className={`px-4 py-2 rounded-2xl shadow-sm text-sm ${
+                                            isMe 
+                                                ? `${BUBBLE_THEMES[activeTheme]} text-white rounded-br-none` 
+                                                : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
+                                        }`}>
+                                            {msg.content}
+                                        </div>
+                                    )}
 
-                                {/* --- UNIFORM IMAGE BUBBLE --- */}
-                                {msg.type === 'image' || msg.attachment_url ? (
-                                    <div className={`p-1 rounded-2xl overflow-hidden ${isMe ? BUBBLE_THEMES[activeTheme] : 'bg-white border'}`}>
-                                        <img 
-                                            src={msg.attachment_url} 
-                                            className="w-64 h-64 object-cover rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
-                                            onClick={() => window.open(msg.attachment_url, '_blank')}
-                                        />
-                                        {/* Optional Caption */}
-                                        {msg.content && msg.content !== 'Sent a photo' && (
-                                            <p className={`text-sm px-2 py-1 ${isMe ? 'text-white' : 'text-gray-800'}`}>{msg.content}</p>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className={`px-4 py-2 rounded-2xl shadow-sm text-sm ${
-                                        isMe 
-                                            ? `${BUBBLE_THEMES[activeTheme]} text-white rounded-br-none` 
-                                            : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
-                                    }`}>
-                                        {msg.content}
-                                    </div>
-                                )}
+                                    {/* DELETE BUTTON (Hover Only) */}
+                                    {isMe && (
+                                        <button 
+                                            onClick={() => handleDeleteMessage(msg.id)}
+                                            className="absolute -left-8 top-1/2 -translate-y-1/2 p-1.5 bg-gray-200 rounded-full text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-500"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                                
                                 <span className="text-[10px] text-gray-400 mt-1 mx-1">
                                     {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
@@ -283,19 +269,20 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* --- FIXED INPUT BAR (z-index 40) --- */}
-            <div className="fixed bottom-0 left-0 w-full z-40 bg-white border-t p-3 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+            {/* --- INPUT BAR --- */}
+            <div className="bg-white border-t p-3 sticky bottom-0 z-20">
                 {previewUrl && (
-                    <div className="flex items-center gap-2 mb-2 p-2 bg-gray-100 rounded-lg w-fit">
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-gray-100 rounded-lg w-fit animate-in fade-in slide-in-from-bottom-2">
                         <img src={previewUrl} className="w-12 h-12 object-cover rounded-md" />
-                        <button onClick={() => { setSelectedImage(null); setPreviewUrl(null); }}><X size={16}/></button>
+                        <span className="text-xs text-gray-500">Image selected</span>
+                        <button onClick={() => { setSelectedImage(null); setPreviewUrl(null); }} className="p-1 hover:bg-gray-200 rounded-full"><X size={16}/></button>
                     </div>
                 )}
                 <form onSubmit={handleSend} className="flex gap-2 items-end">
                     <button 
                         type="button" 
                         onClick={() => fileInputRef.current.click()}
-                        className="p-3 text-gray-400 hover:bg-gray-100 rounded-full"
+                        className="p-3 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
                     >
                         <ImageIcon size={22} />
                     </button>
@@ -310,7 +297,7 @@ export default function ChatPage() {
                     <div className="flex-1 bg-gray-100 rounded-2xl flex items-center px-4 py-2">
                         <input
                             className="flex-1 bg-transparent outline-none text-sm max-h-24"
-                            placeholder="Message..."
+                            placeholder={selectedImage ? "Add a caption..." : "Message..."}
                             value={input}
                             onChange={e => setInput(e.target.value)}
                         />
@@ -319,7 +306,7 @@ export default function ChatPage() {
                     <button 
                         type="submit" 
                         disabled={!input.trim() && !selectedImage}
-                        className={`p-3 rounded-full text-white shadow-md transition-all ${
+                        className={`p-3 rounded-full text-white shadow-md transition-all transform active:scale-95 ${
                             (!input.trim() && !selectedImage) ? 'bg-gray-300' : BUBBLE_THEMES[activeTheme]
                         }`}
                     >
@@ -328,10 +315,31 @@ export default function ChatPage() {
                 </form>
             </div>
 
-            {/* --- SETTINGS MODAL (Same as before) --- */}
+            {/* --- IMAGE MODAL --- */}
+            <AnimatePresence>
+                {expandedImage && (
+                    <motion.div 
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
+                        onClick={() => setExpandedImage(null)}
+                    >
+                        <button className="absolute top-4 right-4 text-white p-2 bg-white/10 rounded-full hover:bg-white/20">
+                            <X size={24} />
+                        </button>
+                        <motion.img 
+                            initial={{ scale: 0.9 }} animate={{ scale: 1 }}
+                            src={expandedImage} 
+                            className="max-w-full max-h-screen rounded-lg shadow-2xl"
+                            onClick={(e) => e.stopPropagation()} // Click image shouldn't close
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* --- SETTINGS MODAL --- */}
             <AnimatePresence>
                 {showSettings && (
-                     <motion.div 
+                    <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end"
                         onClick={() => setShowSettings(false)}
@@ -342,8 +350,8 @@ export default function ChatPage() {
                             className="w-80 bg-white h-full shadow-2xl p-6 overflow-y-auto"
                         >
                             <h2 className="text-xl font-bold mb-6">Chat Settings</h2>
-
-                            {/* Group Photo */}
+                            
+                            {/* Group Photo Section */}
                             <div className="mb-8 text-center">
                                 <div className="w-24 h-24 mx-auto rounded-full bg-gray-100 mb-3 relative overflow-hidden group">
                                     <img 
@@ -362,7 +370,7 @@ export default function ChatPage() {
                                 />
                             </div>
 
-                            {/* Theme Selector */}
+                            {/* Theme Section */}
                             <div className="mb-8">
                                 <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Theme Color</h3>
                                 <div className="flex gap-3 flex-wrap">
@@ -378,7 +386,7 @@ export default function ChatPage() {
                                 </div>
                             </div>
 
-                            {/* Location Sharing */}
+                            {/* Location Section */}
                             <div className="mb-8">
                                 <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Location</h3>
                                 <div className="bg-blue-50 p-4 rounded-xl flex items-center justify-between">
@@ -403,7 +411,7 @@ export default function ChatPage() {
                                 </div>
                             </div>
 
-                            {/* Active Location Sharers List */}
+                            {/* Active Sharers */}
                             {activeSharers.length > 0 && (
                                 <div>
                                     <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">On the Map</h3>
