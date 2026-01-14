@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Settings, Check } from 'lucide-react';
+import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Check, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 
-// Color themes mapping
+// ... (Keep THEMES and BUBBLE_THEMES constants same as before) ...
 const THEMES = {
     blue: 'from-blue-600 to-indigo-600',
     purple: 'from-purple-600 to-pink-600',
@@ -37,16 +37,17 @@ export default function ChatPage() {
     const [showSettings, setShowSettings] = useState(false);
     const [activeTheme, setActiveTheme] = useState('blue');
     const [isSharingLocation, setIsSharingLocation] = useState(false);
-    const [activeSharers, setActiveSharers] = useState([]); // People sharing location
+    const [activeSharers, setActiveSharers] = useState([]);
+    const [selectedMessageId, setSelectedMessageId] = useState(null); // For delete menu
     
     // File Upload State
     const [selectedImage, setSelectedImage] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
     const fileInputRef = useRef();
 
-    const scrollRef = useRef();
     const messagesEndRef = useRef();
 
+    // ... (Keep useEffects 1, 2, 3 for fetching data and polling exactly the same) ...
     // 1. Fetch Trip Data & Settings
     useEffect(() => {
         const fetchInit = async () => {
@@ -69,7 +70,7 @@ export default function ChatPage() {
             try {
                 const [mRes, lRes] = await Promise.all([
                     api.get(`/trips/${tripId}/messages`),
-                    api.get(`/trips/${tripId}/locations`) // New Endpoint
+                    api.get(`/trips/${tripId}/locations`)
                 ]);
                 setMessages(mRes.data);
                 setActiveSharers(lRes.data);
@@ -96,11 +97,11 @@ export default function ChatPage() {
                 { enableHighAccuracy: true }
             );
         } else {
-            // Tell server we stopped sharing
             api.post(`/trips/${tripId}/location`, { lat: 0, lng: 0, is_sharing: false });
         }
         return () => watcher && navigator.geolocation.clearWatch(watcher);
     }, [isSharingLocation, tripId]);
+
 
     // Auto-scroll
     useEffect(() => {
@@ -116,16 +117,18 @@ export default function ChatPage() {
         if (input) formData.append('content', input);
         if (selectedImage) formData.append('image', selectedImage);
 
-        // Optimistic UI (Text only for now)
-        if (!selectedImage) {
-            const temp = {
-                id: Date.now(), content: input, type: 'text',
-                user: { id: user.id, username: user.username, profile_pic: user.profile_pic },
-                created_at: new Date().toISOString()
-            };
-            setMessages([...messages, temp]);
-        }
+        // Optimistic UI Update
+        const tempId = Date.now();
+        const tempMsg = {
+            id: tempId,
+            content: input,
+            type: selectedImage ? 'image' : 'text',
+            attachment_url: selectedImage ? URL.createObjectURL(selectedImage) : null, // Show local preview
+            user: { id: user.id, username: user.username, profile_pic: user.profile_pic },
+            created_at: new Date().toISOString()
+        };
         
+        setMessages([...messages, tempMsg]);
         setInput('');
         setSelectedImage(null);
         setPreviewUrl(null);
@@ -134,8 +137,26 @@ export default function ChatPage() {
             await api.post(`/trips/${tripId}/messages`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            // Real fetch will happen on next poll to show image
-        } catch (e) { alert('Failed to send'); }
+        } catch (e) {
+            console.error('Failed to send', e);
+            // Optionally remove the temp message on failure
+        }
+    };
+
+    const handleDeleteMessage = async (msgId, mode) => {
+        // mode = 'everyone' or 'me'
+        if(!confirm(`Delete for ${mode}?`)) return;
+        
+        try {
+            // Need to add DELETE route in backend: Route::delete('/messages/{id}', ...)
+            await api.delete(`/messages/${msgId}`, { params: { mode } });
+            
+            // Remove from local state immediately
+            setMessages(messages.filter(m => m.id !== msgId));
+            setSelectedMessageId(null);
+        } catch (e) {
+            alert('Failed to delete message');
+        }
     };
 
     const handleImageSelect = (e) => {
@@ -145,7 +166,8 @@ export default function ChatPage() {
             setPreviewUrl(URL.createObjectURL(file));
         }
     };
-
+    
+    // ... (keep updateTripSettings same as before) ...
     const updateTripSettings = async (updates) => {
         try {
             const formData = new FormData();
@@ -162,10 +184,12 @@ export default function ChatPage() {
         } catch (e) { alert('Failed to update'); }
     };
 
+
     return (
-        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
-            {/* --- HEADER --- */}
-            <div className={`bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg sticky top-0 z-30 transition-colors duration-500`}>
+        <div className="h-screen bg-gray-50 flex flex-col relative overflow-hidden">
+            
+            {/* --- FIXED HEADER (z-index 40) --- */}
+            <div className={`fixed top-0 left-0 w-full z-40 bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg transition-colors duration-500`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/20 rounded-full">
@@ -174,36 +198,33 @@ export default function ChatPage() {
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden border-2 border-white/50">
                                 <img 
-                                    src={tripData?.group_photo || tripData?.user?.profile_pic || `https://ui-avatars.com/api/?name=${tripData?.title}&background=random`} 
+                                    src={tripData?.group_photo || tripData?.user?.profile_pic || `https://ui-avatars.com/api/?name=${tripData?.title || 'T'}&background=random`} 
                                     alt="Group"
                                     className="w-full h-full object-cover"
                                 />
                             </div>
                             <div>
-                                <h1 className="font-bold text-lg leading-tight">{tripData?.title || 'Loading...'}</h1>
+                                <h1 className="font-bold text-lg leading-tight line-clamp-1">{tripData?.title || 'Trip Chat'}</h1>
                                 <p className="text-xs text-white/80 flex items-center gap-1">
-                                    <Users size={12} /> {collaborators.length} members
+                                    <Users size={12} /> {collaborators.length}
                                     {activeSharers.length > 0 && (
                                         <span className="flex items-center gap-1 ml-2 bg-green-500/20 px-1.5 py-0.5 rounded-full">
                                             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/> 
-                                            {activeSharers.length} sharing location
+                                            {activeSharers.length} Live
                                         </span>
                                     )}
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <button 
-                        onClick={() => setShowSettings(true)}
-                        className="p-2 hover:bg-white/20 rounded-full transition"
-                    >
+                    <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-white/20 rounded-full">
                         <MoreVertical size={20} />
                     </button>
                 </div>
             </div>
 
-            {/* --- MESSAGES --- */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" ref={scrollRef}>
+            {/* --- SCROLLABLE MESSAGES (Padding top & bottom to clear fixed bars) --- */}
+            <div className="flex-1 overflow-y-auto pt-20 pb-24 px-4 space-y-4" onClick={() => setSelectedMessageId(null)}>
                 {messages.map((msg) => {
                     const isMe = msg.user.id === user.id;
                     return (
@@ -211,21 +232,37 @@ export default function ChatPage() {
                             key={msg.id}
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className={`flex gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
+                            className={`flex gap-2 ${isMe ? 'justify-end' : 'justify-start'} relative group`}
                         >
-                            {!isMe && (
-                                <img src={msg.user.profile_pic} className="w-8 h-8 rounded-full self-end mb-1" />
+                             {/* DELETE MENU (Show on click) */}
+                             {selectedMessageId === msg.id && isMe && (
+                                <div className="absolute top-0 right-0 -mt-8 bg-white shadow-lg rounded-lg flex items-center p-1 z-10 text-xs">
+                                    <button onClick={() => handleDeleteMessage(msg.id, 'me')} className="px-2 py-1 hover:bg-gray-100 text-gray-700">Delete for me</button>
+                                    <div className="w-px h-3 bg-gray-300 mx-1"></div>
+                                    <button onClick={() => handleDeleteMessage(msg.id, 'everyone')} className="px-2 py-1 hover:bg-red-50 text-red-600">Everyone</button>
+                                </div>
                             )}
-                            <div className={`max-w-[70%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+
+                            {!isMe && <img src={msg.user.profile_pic} className="w-8 h-8 rounded-full self-end mb-1" />}
+                            
+                            <div 
+                                className={`max-w-[70%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                                onClick={(e) => { e.stopPropagation(); if(isMe) setSelectedMessageId(msg.id); }}
+                            >
                                 {!isMe && <span className="text-[10px] text-gray-500 ml-2 mb-1">{msg.user.username}</span>}
-                                
-                                {msg.type === 'image' ? (
-                                    <div className={`p-1 rounded-2xl ${isMe ? BUBBLE_THEMES[activeTheme] : 'bg-white border'}`}>
+
+                                {/* --- UNIFORM IMAGE BUBBLE --- */}
+                                {msg.type === 'image' || msg.attachment_url ? (
+                                    <div className={`p-1 rounded-2xl overflow-hidden ${isMe ? BUBBLE_THEMES[activeTheme] : 'bg-white border'}`}>
                                         <img 
                                             src={msg.attachment_url} 
-                                            className="rounded-xl max-h-60 object-cover cursor-pointer"
+                                            className="w-64 h-64 object-cover rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
                                             onClick={() => window.open(msg.attachment_url, '_blank')}
                                         />
+                                        {/* Optional Caption */}
+                                        {msg.content && msg.content !== 'Sent a photo' && (
+                                            <p className={`text-sm px-2 py-1 ${isMe ? 'text-white' : 'text-gray-800'}`}>{msg.content}</p>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className={`px-4 py-2 rounded-2xl shadow-sm text-sm ${
@@ -246,8 +283,8 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* --- INPUT BAR --- */}
-            <div className="bg-white border-t p-3">
+            {/* --- FIXED INPUT BAR (z-index 40) --- */}
+            <div className="fixed bottom-0 left-0 w-full z-40 bg-white border-t p-3 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
                 {previewUrl && (
                     <div className="flex items-center gap-2 mb-2 p-2 bg-gray-100 rounded-lg w-fit">
                         <img src={previewUrl} className="w-12 h-12 object-cover rounded-md" />
@@ -291,10 +328,10 @@ export default function ChatPage() {
                 </form>
             </div>
 
-            {/* --- SETTINGS MODAL --- */}
+            {/* --- SETTINGS MODAL (Same as before) --- */}
             <AnimatePresence>
                 {showSettings && (
-                    <motion.div 
+                     <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end"
                         onClick={() => setShowSettings(false)}
