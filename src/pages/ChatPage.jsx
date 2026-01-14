@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Settings, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Send, Users, MoreVertical, Image as ImageIcon, MapPin, X, Camera, Check, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
@@ -43,7 +43,6 @@ export default function ChatPage() {
     const [previewUrl, setPreviewUrl] = useState(null);
     const [expandedImage, setExpandedImage] = useState(null); 
     const fileInputRef = useRef();
-
     const messagesEndRef = useRef();
 
     // 1. Fetch Init
@@ -111,31 +110,22 @@ export default function ChatPage() {
         if (!input.trim() && !selectedImage) return;
 
         const formData = new FormData();
-        
-        // FIX: Ensure we only append if truthy, and 'content' must be string
         if (input && input.trim().length > 0) {
             formData.append('content', input.trim());
         }
-        
         if (selectedImage) {
             formData.append('image', selectedImage);
         }
 
-        // Clear UI
         setInput('');
         setSelectedImage(null);
         setPreviewUrl(null);
 
         try {
-            // FIX: Explicitly let axios set headers, but if that fails, 
-            // the backend might be seeing an empty request if the file is too huge.
-            // Ensure PHP post_max_size > 10MB in your server config.
             await api.post(`/trips/${tripId}/messages`, formData);
-            
             const { data } = await api.get(`/trips/${tripId}/messages`);
             setMessages(data);
         } catch (e) { 
-            // Use e.response to see detailed server error in console
             console.error("Send Error:", e.response?.data || e.message);
             alert(`Failed to send: ${e.response?.data?.message || 'Unknown error'}`);
         }
@@ -154,7 +144,6 @@ export default function ChatPage() {
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
-            // Basic frontend check
             if (file.size > 10 * 1024 * 1024) {
                 alert("File too large. Max 10MB.");
                 return;
@@ -179,10 +168,11 @@ export default function ChatPage() {
     };
 
     return (
-        // FIX: Use fixed positioning to "break out" of Layout's padding/scroll
-        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 h-[100dvh]">
+        // KEY CHANGE: Fixed container with flex column layout
+        // 'h-[100dvh]' handles dynamic viewport height on mobile
+        <div className="fixed inset-0 z-[100] bg-gray-50 flex flex-col h-[100dvh] w-full">
             
-            {/* --- HEADER (No sticky needed, just flex item 1) --- */}
+            {/* --- HEADER (Flex Item: Shrinks/Grows based on content, but usually fixed height) --- */}
             <div className={`shrink-0 bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -216,8 +206,8 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {/* --- MESSAGES AREA (Flex 1 takes remaining space) --- */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 scroll-smooth">
+            {/* --- MESSAGES AREA (Flex Item: Grows to fill available space) --- */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 w-full" ref={scrollRef}>
                 {messages.map((msg) => {
                     const isMe = msg.user.id === user.id;
                     return (
@@ -268,7 +258,6 @@ export default function ChatPage() {
                                         </button>
                                     )}
                                 </div>
-                                
                                 <span className="text-[10px] text-gray-400 mt-1 mx-1">
                                     {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
@@ -279,8 +268,8 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* --- INPUT BAR (Flex item 3) --- */}
-            <div className="shrink-0 bg-white border-t p-3 pb-safe">
+            {/* --- INPUT BAR (Flex Item: Shrink-0 stays at bottom) --- */}
+            <div className="shrink-0 bg-white border-t p-3 w-full safe-area-bottom">
                 {previewUrl && (
                     <div className="flex items-center gap-2 mb-2 p-2 bg-gray-100 rounded-lg w-fit animate-in fade-in slide-in-from-bottom-2">
                         <img src={previewUrl} className="w-12 h-12 object-cover rounded-md" />
@@ -306,7 +295,7 @@ export default function ChatPage() {
                     
                     <div className="flex-1 bg-gray-100 rounded-2xl flex items-center px-4 py-2">
                         <input
-                            className="flex-1 bg-transparent outline-none text-sm max-h-24"
+                            className="flex-1 bg-transparent outline-none text-sm max-h-24 w-full"
                             placeholder={selectedImage ? "Add a caption..." : "Message..."}
                             value={input}
                             onChange={e => setInput(e.target.value)}
@@ -325,12 +314,12 @@ export default function ChatPage() {
                 </form>
             </div>
 
-            {/* --- MODALS (No Changes needed, they use fixed) --- */}
+            {/* --- MODALS --- */}
             <AnimatePresence>
                 {expandedImage && (
                     <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
+                        className="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
                         onClick={() => setExpandedImage(null)}
                     >
                         <button className="absolute top-4 right-4 text-white p-2 bg-white/10 rounded-full hover:bg-white/20">
@@ -350,7 +339,7 @@ export default function ChatPage() {
                 {showSettings && (
                     <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex justify-end"
+                        className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex justify-end"
                         onClick={() => setShowSettings(false)}
                     >
                         <motion.div 
@@ -359,7 +348,7 @@ export default function ChatPage() {
                             className="w-80 bg-white h-full shadow-2xl p-6 overflow-y-auto"
                         >
                             <h2 className="text-xl font-bold mb-6">Chat Settings</h2>
-                            {/* ... Settings content from previous version ... */}
+                            
                             <div className="mb-8 text-center">
                                 <div className="w-24 h-24 mx-auto rounded-full bg-gray-100 mb-3 relative overflow-hidden group">
                                     <img 
@@ -392,8 +381,8 @@ export default function ChatPage() {
                                     ))}
                                 </div>
                             </div>
-                            
-                             <div className="mb-8">
+
+                            <div className="mb-8">
                                 <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Location</h3>
                                 <div className="bg-blue-50 p-4 rounded-xl flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -416,7 +405,6 @@ export default function ChatPage() {
                                     </label>
                                 </div>
                             </div>
-
                         </motion.div>
                     </motion.div>
                 )}
