@@ -142,6 +142,12 @@ export default function ChatPage() {
             alert(`Failed to send: ${errors || msg}`);
         }
     };
+    const getImageUrl = (path) => {
+        if (!path) return null;
+        if (path.startsWith('http')) return path; // Already full URL
+        // Prepend your actual backend URL
+        return `https://intellitravel.brgycare.com${path}`; 
+    };
 
     const handleDeleteMessage = async (msgId) => {
         if(!confirm('Delete this message for everyone?')) return;
@@ -241,9 +247,9 @@ export default function ChatPage() {
                                     {msg.type === 'image' && msg.attachment_url ? (
                                         <div className={`p-1 rounded-2xl ${isMe ? BUBBLE_THEMES[activeTheme] : 'bg-white border'}`}>
                                             <img 
-                                                src={msg.attachment_url} 
+                                                src={getImageUrl(msg.attachment_url)} 
                                                 className="rounded-xl w-60 h-60 object-cover cursor-pointer hover:opacity-95 transition-opacity bg-gray-100"
-                                                onClick={() => setExpandedImage(msg.attachment_url)}
+                                                onClick={() => setExpandedImage(getImageUrl(msg.attachment_url))}
                                             />
                                             {msg.content && msg.content !== 'Sent a photo' && (
                                                 <p className={`text-sm px-2 py-1 ${isMe ? 'text-white' : 'text-gray-800'}`}>
