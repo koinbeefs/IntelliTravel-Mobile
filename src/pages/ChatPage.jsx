@@ -112,8 +112,13 @@ export default function ChatPage() {
         if (!input.trim() && !selectedImage) return;
 
         const formData = new FormData();
-        if (input) formData.append('content', input);
-        if (selectedImage) formData.append('image', selectedImage);
+        if (input.trim()) {
+            formData.append('content', input);
+        }
+        
+        if (selectedImage) {
+            formData.append('image', selectedImage);
+        }
 
         // Clear UI immediately
         setInput('');
@@ -165,10 +170,10 @@ export default function ChatPage() {
     };
 
     return (
-        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden relative">
+        <div className="flex flex-col h-screen overflow-hidden bg-gray-50 relative">
             
             {/* --- HEADER --- */}
-            <div className={`bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg sticky top-0 z-30`}>
+            <div className={`shrink-0 bg-gradient-to-r ${THEMES[activeTheme]} text-white p-4 shadow-lg z-30`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/20 rounded-full">
@@ -202,7 +207,7 @@ export default function ChatPage() {
             </div>
 
             {/* --- MESSAGES AREA --- */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" ref={scrollRef}>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 scroll-smooth" ref={scrollRef}>
                 {messages.map((msg) => {
                     const isMe = msg.user.id === user.id;
                     return (
