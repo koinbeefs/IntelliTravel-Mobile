@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Calendar, Clock, ChevronRight, Trash2, Plus, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../context/AuthContext'; // Import useAuth
+import { MapPin, Calendar, Clock, ChevronRight, Trash2, Plus, ArrowLeft, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '../lib/axios';
 
 export default function TripsListPage() {
     const navigate = useNavigate();
+    const { user } = useAuth(); // Get current user
     const [trips, setTrips] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -31,7 +33,7 @@ export default function TripsListPage() {
             setTrips(trips.filter(t => t.id !== tripId));
             alert('Trip deleted');
         } catch (e) {
-            alert('Failed to delete trip');
+            alert(e.response?.data?.message || 'Failed to delete trip');
         }
     };
 
@@ -71,45 +73,67 @@ export default function TripsListPage() {
                         ))}
                     </div>
                 ) : trips.length > 0 ? (
-                    trips.map((trip, i) => (
-                        <motion.div 
-                            key={trip.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.1 }}
-                            className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
-                            onClick={() => navigate(`/trips/${trip.id}`)}
-                        >
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-gray-900 text-lg">{trip.title}</h3>
-                                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                                        <MapPin size={14} />
-                                        {trip.itineraries_count} location{trip.itineraries_count !== 1 ? 's' : ''}
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteTrip(trip.id);
-                                        }}
-                                        className="p-2 hover:bg-red-50 rounded-lg transition"
-                                    >
-                                        <Trash2 size={18} className="text-red-500" />
-                                    </button>
-                                    <ChevronRight size={20} className="text-gray-400" />
-                                </div>
-                            </div>
+                    trips.map((trip, i) => {
+                        // Check if current user is owner
+                        const isOwner = trip.user_id === user?.id;
 
-                            <div className="flex gap-4 text-xs text-gray-500">
-                                <div className="flex items-center gap-1">
-                                    <Calendar size={12} />
-                                    {formatDate(trip.created_at)}
+                        return (
+                            <motion.div 
+                                key={trip.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.1 }}
+                                className={`p-4 rounded-2xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden
+                                    ${isOwner ? 'bg-white border-gray-100' : 'bg-orange-50/50 border-orange-100'}
+                                `}
+                                onClick={() => navigate(`/trips/${trip.id}`)}
+                            >
+                                {/* Shared Badge */}
+                                {!isOwner && (
+                                    <div className="absolute top-0 right-0 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-1 rounded-bl-lg flex items-center gap-1">
+                                        <Users size={10} /> Shared with you
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-gray-900 text-lg">{trip.title}</h3>
+                                        <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                                            <MapPin size={14} />
+                                            {trip.destination}
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="flex gap-2 pt-2">
+                                        {/* Only show Delete if Owner */}
+                                        {isOwner && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteTrip(trip.id);
+                                                }}
+                                                className="p-2 hover:bg-red-50 rounded-lg transition"
+                                            >
+                                                <Trash2 size={18} className="text-red-500" />
+                                            </button>
+                                        )}
+                                        <ChevronRight size={20} className="text-gray-400 mt-1" />
+                                    </div>
                                 </div>
-                            </div>
-                        </motion.div>
-                    ))
+
+                                <div className="flex gap-4 text-xs text-gray-500">
+                                    <div className="flex items-center gap-1">
+                                        <Calendar size={12} />
+                                        {formatDate(trip.created_at)}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <MapPin size={12} />
+                                        {trip.itineraries_count || 0} stops
+                                    </div>
+                                </div>
+                            </motion.div>
+                        );
+                    })
                 ) : (
                     <div className="text-center py-16">
                         <div className="text-4xl mb-3">🗺️</div>
